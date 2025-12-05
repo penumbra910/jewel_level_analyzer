@@ -405,31 +405,29 @@ def format_level_evaluation(val):
     return ','.join(formatted_numbers)
 
 def generate_html_report():
-    """生成HTML报告"""
+    """生成HTML报告 - 使用Jinja2模板"""
     try:
-        # 读取template.html
-        with open('template.html', 'r', encoding='utf-8') as f:
-            template_content = f.read()
+        # 设置Jinja2环境
+        env = Environment(loader=FileSystemLoader('.'))  # 从当前目录加载模板
+        template = env.get_template('template.html')
         
-        # 替换占位符
-        html_content = template_content
-        replacements = {
-            '{{ table1 }}': st.session_state.table1_html,
-            '{{ chart_data1 }}': st.session_state.chart_html1,
-            '{{ chart_data2 }}': st.session_state.chart_html2,
-            '{{ table2 }}': st.session_state.table2_html,
-            '{{ table3 }}': st.session_state.table3_html,
-            '{{ title }}': 'Jewel Simulation Report',
-            '{{ subtitle1 }}': 'Summary',
-            '{{ subtitle2 }}': 'Level',
-            '{{ subtitle3 }}': 'Event'
-        }
+        # 获取当前时间用于报告
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        for placeholder, value in replacements.items():
-            if value:
-                html_content = html_content.replace(placeholder, value)
+        # 渲染模板
+        rendered_html = template.render(
+            title='Jewel Simulation Report',
+            subtitle1='Summary',
+            subtitle2='Level',
+            current_time=current_time,  # 添加生成时间
+            table1=st.session_state.table1_html, 
+            chart_data1=st.session_state.chart_html1, 
+            chart_data2=st.session_state.chart_html2,  
+            table2=st.session_state.table2_html, 
+            table3=st.session_state.table3_html
+        )
         
-        return html_content
+        return rendered_html
         
     except Exception as e:
         st.error(f"生成HTML报告时出错: {str(e)}")
