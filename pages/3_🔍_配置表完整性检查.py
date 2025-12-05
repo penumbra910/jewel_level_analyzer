@@ -88,6 +88,7 @@ def create_version_completeness_chart(df_level_group):
         ))
 
     fig.update_layout(
+        title='Event AP Config Version',
         xaxis_title='EventID',
         yaxis_title='Version',
         showlegend=False, 
