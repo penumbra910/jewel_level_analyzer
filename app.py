@@ -1,9 +1,5 @@
 import streamlit as st
 
-from utils.style_utils import load_custom_css
-
-# 加载自定义CSS
-load_custom_css()
 
 st.set_page_config(
     page_title="游戏关卡分析工具",
