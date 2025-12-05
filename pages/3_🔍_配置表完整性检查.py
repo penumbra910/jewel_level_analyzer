@@ -85,6 +85,13 @@ def create_version_completeness_chart(df_level_group):
             name=f'Version {version}',
             hovertemplate='<b>Event ID:</b> %{x}<br><b>Version:</b> %{y}<extra></extra>'
         ))
+
+        fig.update_layout(
+            xaxis_title='EventID',
+            yaxis_title='Version',
+            legend=False,
+            height=500
+        )
     
     return fig
 
