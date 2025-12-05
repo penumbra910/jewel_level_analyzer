@@ -525,7 +525,7 @@ if st.session_state.report_generated:
         st.metric("总关卡数", st.session_state.total_levels)
     
     with col2:
-        st.metric("总体首赢率", f"{st.session_state.overall_win_rate:.1%}")
+        st.metric("总体首赢率", f"{st.session_state.overall_win_rate:.2%}")
     
     with col3:
         if st.session_state.abnormal_table is not None:
@@ -552,7 +552,7 @@ if st.session_state.report_generated:
     data_tabs = st.tabs(["汇总统计", "关卡指标", "异常检测"])
     
     with data_tabs[0]:
-        st.dataframe(st.session_state.summary_table, use_container_width=True)
+        st.dataframe(st.session_state.summary_table, use_container_width=True, hide_index=True)
     
     with data_tabs[1]:
         # 显示完整关卡数据
@@ -568,11 +568,11 @@ if st.session_state.report_generated:
             'evaluation': '关卡评估',
             'rec_difficulty': '推荐难度'
         }, inplace=True)
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
     
     with data_tabs[2]:
         if st.session_state.abnormal_table is not None and len(st.session_state.abnormal_table) > 0:
-            st.dataframe(st.session_state.abnormal_table, use_container_width=True)
+            st.dataframe(st.session_state.abnormal_table, use_container_width=True, hide_index=True)
         else:
             st.success("✅ 未检测到异常关卡")
     
