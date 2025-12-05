@@ -13,6 +13,9 @@ import os
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# 导入共享常量 🔥 现在从config导入
+from config import FUUU_NEW, FUUU_OLD, FUUU_EVA, ATTRIBUTE_MAP, PROCESSING_CONFIG
+
 # 导入数据处理函数
 from utils.data_processing import run_full_pipeline
 from utils.file_utils import (
@@ -28,7 +31,6 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
-
 
 # ==============================
 # Session State初始化
@@ -73,6 +75,13 @@ def init_eval_session():
     # 处理进度
     if 'eval_progress' not in st.session_state:
         st.session_state.eval_progress = 0
+    
+    # 使用共享配置中的默认值 🔥
+    if 'zscore_threshold' not in st.session_state:
+        st.session_state.zscore_threshold = PROCESSING_CONFIG['default_zscore_threshold']
+    
+    if 'outlier_threshold' not in st.session_state:
+        st.session_state.outlier_threshold = PROCESSING_CONFIG['default_outlier_threshold']
 
 # ==============================
 # 页面布局组件
@@ -343,7 +352,7 @@ def processing_section():
                 "Z-score阈值",
                 min_value=0.5,
                 max_value=3.0,
-                value=1.0,
+                value=st.session_state.zscore_threshold,
                 step=0.1,
                 help="用于确定evaluation的z-score阈值"
             )
@@ -352,7 +361,7 @@ def processing_section():
                 "异常值阈值",
                 min_value=100,
                 max_value=500,
-                value=200,
+                value=st.session_state.outlier_threshold,
                 step=50,
                 help="actual_rev异常值过滤阈值"
             )
@@ -492,48 +501,6 @@ def download_section():
     # 显示文件信息
     st.info(f"**文件信息**: {filename} | 大小: {len(st.session_state.eval_result_file) / 1024:.1f} KB")
     
-    # 显示处理结果预览
-    if st.session_state.eval_processed_data:
-        df_processed = st.session_state.eval_processed_data['df_processed']
-        df_level_conf_processed = st.session_state.eval_processed_data['df_level_conf_processed']
-        
-        st.subheader("🔍 结果预览")
-        
-        # 创建选项卡
-        tab1, tab2, tab3 = st.tabs(["📊 处理数据预览", "📋 level_conf预览", "📈 数据统计"])
-        
-        with tab1:
-            st.markdown("**处理后数据 (前10行)**")
-            display_cols = ['event_id', 'ap_config_version', 'lv_id', 'level_name', 
-                          'churn_rate', 'actual_rev', 'z-score', 'fuuu', 'evaluation']
-            available_cols = [col for col in display_cols if col in df_processed.columns]
-            st.dataframe(df_processed[available_cols].head(10), use_container_width=True)
-        
-        with tab2:
-            st.markdown("**level_conf结果 (前10行)**")
-            display_cols_conf = ['level_name', 'attribute', 'evaluation', 'rec_difficulty']
-            available_cols_conf = [col for col in display_cols_conf if col in df_level_conf_processed.columns]
-            st.dataframe(df_level_conf_processed[available_cols_conf].head(10), use_container_width=True)
-        
-        with tab3:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**数值列统计**")
-                numeric_cols = df_processed.select_dtypes(include=[np.number]).columns
-                for col in ['churn_rate', 'actual_rev', 'z-score']:
-                    if col in numeric_cols:
-                        st.write(f"**{col}**:")
-                        st.write(f"  均值: {df_processed[col].mean():.3f}")
-                        st.write(f"  标准差: {df_processed[col].std():.3f}")
-                        st.write(f"  范围: [{df_processed[col].min():.3f}, {df_processed[col].max():.3f}]")
-            
-            with col2:
-                st.markdown("**分类统计**")
-                if 'evaluation' in df_processed.columns:
-                    eval_counts = df_processed['evaluation'].value_counts().head(10)
-                    st.write("**Evaluation分布:**")
-                    st.dataframe(eval_counts)
     
     # 重新开始按钮
     st.markdown("---")
@@ -562,6 +529,9 @@ def reset_evaluation():
     st.session_state.eval_result_file = None
     st.session_state.eval_processing_error = None
     st.session_state.eval_progress = 0
+    # 保留配置参数
+    st.session_state.zscore_threshold = PROCESSING_CONFIG['default_zscore_threshold']
+    st.session_state.outlier_threshold = PROCESSING_CONFIG['default_outlier_threshold']
 
 # ==============================
 # 主函数
