@@ -38,7 +38,7 @@ def plotly_to_html(fig):
     return pio.to_html(fig, full_html=False, include_plotlyjs='cdn')
 
 def create_version_completeness_chart(df_level_group):
-    """创建Event Version完整性图表"""
+    """创建Event Version完整性图表 - 鲜艳彩色版"""
     fig = go.Figure()
     
     # 跳过前2行数据
@@ -47,27 +47,99 @@ def create_version_completeness_chart(df_level_group):
     # 获取唯一的版本号并排序
     unique_versions = sorted(df_plot['ap_config_version'].astype(str).unique())
     
+    # 鲜艳的颜色方案
+    bright_colors = [
+        '#FF6B6B',  # 珊瑚红
+        '#4ECDC4',  # 青绿色
+        '#FFD166',  # 金黄色
+        '#06D6A0',  # 薄荷绿
+        '#118AB2',  # 宝蓝色
+        '#EF476F',  # 粉红色
+        '#073B4C',  # 深蓝色
+        '#7209B7',  # 紫色
+        '#F72585',  # 洋红色
+        '#3A86FF',  # 亮蓝色
+        '#FB5607',  # 橙色
+        '#8338EC',  # 紫罗兰色
+    ]
+    
+    # 为每个版本分配颜色
+    color_map = {}
+    for i, version in enumerate(unique_versions):
+        color_map[version] = bright_colors[i % len(bright_colors)]
+    
     # 遍历每个版本并添加散点
     for version in unique_versions:
         subset = df_plot[df_plot['ap_config_version'].astype(str) == version]
+        
         fig.add_trace(go.Scatter(
             x=subset['event_id'].astype(str),
             y=subset['ap_config_version'].astype(str),
             mode='markers',
-            marker=dict(symbol='diamond', size=10),
-            name=f'Config Version {version}'
+            marker=dict(
+                symbol='diamond',
+                size=14,
+                color=color_map[version],
+                opacity=0.9,
+                line=dict(
+                    width=2,
+                    color='white'
+                )
+            ),
+            name=f'Version {version}',
+            hovertemplate='<b>Event ID:</b> %{x}<br><b>Version:</b> %{y}<extra></extra>'
         ))
     
     # 更新布局
     fig.update_layout(
-        title='Event Version 完整性',
-        xaxis_title='Event ID',
-        yaxis_title='AP Config Version',
-        showlegend=False,
-        yaxis=dict(tickvals=unique_versions),
-        height=500,
-        margin=dict(l=50, r=50, t=80, b=50)
+        title=dict(
+            text='📊 Event Version 完整性',
+            font=dict(size=20, color='#2c3e50'),
+            x=0.5,
+            xanchor='center'
+        ),
+        xaxis_title=dict(
+            text='Event ID',
+            font=dict(size=14, color='#34495e')
+        ),
+        yaxis_title=dict(
+            text='AP Config Version',
+            font=dict(size=14, color='#34495e')
+        ),
+        showlegend=True,
+        legend=dict(
+            title=dict(
+                text="版本颜色标识",
+                font=dict(size=12, color='#2c3e50')
+            ),
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=1.02,
+            bgcolor='rgba(255, 255, 255, 0.9)',
+            bordercolor='rgba(52, 73, 94, 0.3)',
+            borderwidth=1,
+            font=dict(size=11)
+        ),
+        yaxis=dict(
+            tickvals=unique_versions,
+            gridcolor='rgba(189, 195, 199, 0.3)',
+            tickfont=dict(size=12)
+        ),
+        xaxis=dict(
+            gridcolor='rgba(189, 195, 199, 0.3)',
+            tickfont=dict(size=11)
+        ),
+        height=600,
+        margin=dict(l=70, r=150, t=100, b=70),
+        plot_bgcolor='rgba(236, 240, 241, 0.3)',
+        paper_bgcolor='white',
+        hovermode='closest'
     )
+    
+    # 添加网格线
+    fig.update_xaxes(showgrid=True, gridwidth=1, zeroline=False)
+    fig.update_yaxes(showgrid=True, gridwidth=1, zeroline=False)
     
     return fig
 
@@ -147,7 +219,7 @@ if uploaded_file:
             df_level_conf = all_sheets.get('level_conf', pd.DataFrame())
             
             # 第一部分：查看所有sheet
-            st.markdown("### 📋 1. 表结构查看")
+            st.markdown("### 📋 表结构")
             
             # 使用columns展示sheet信息
             col1, col2 = st.columns([2, 1])
@@ -175,7 +247,7 @@ if uploaded_file:
             st.markdown("---")
             
             # 第二部分：展示图表
-            st.markdown("### 📊 2. Event Version完整性图表")
+            st.markdown("### 📊 Event Version 完整性")
             
             if not df_level_group.empty:
                 # 创建图表
@@ -201,7 +273,7 @@ if uploaded_file:
             st.markdown("---")
             
             # 第三部分：查找缺失记录
-            st.markdown("### 🔎 3. 缺失记录检查")
+            st.markdown("### 🔎 缺失level_name检查")
             
             if not df_level_group.empty and not df_level_conf.empty:
                 # 查找缺失记录
@@ -221,14 +293,6 @@ if uploaded_file:
                     # 显示缺失记录表格
                     st.dataframe(missing_df, use_container_width=True, hide_index=True)
                     
-                    # 下载按钮
-                    csv = missing_df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 下载缺失记录(CSV)",
-                        data=csv,
-                        file_name="missing_levels.csv",
-                        mime="text/csv"
-                    )
                 else:
                     st.success("✅ 未发现缺失记录，配置表完整！")
             else:
