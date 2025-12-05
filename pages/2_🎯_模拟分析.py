@@ -335,7 +335,7 @@ def create_chart1(df_level):
     
     # 设置坐标轴标题
     fig.update_layout(
-        title='关卡指标趋势（前80关）',
+        title='FUUU vs. 步数',
         xaxis_title='关卡ID',
         height=500,
         margin=dict(l=80, r=0, t=40, b=80),
