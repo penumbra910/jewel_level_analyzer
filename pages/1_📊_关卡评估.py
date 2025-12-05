@@ -24,6 +24,10 @@ from utils.file_utils import (
     generate_excel_output,
     generate_filename
 )
+from utils.style_utils import load_custom_css
+
+# 加载自定义CSS
+load_custom_css()
 
 # 页面配置
 st.set_page_config(
