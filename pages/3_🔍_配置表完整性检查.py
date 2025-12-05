@@ -242,26 +242,4 @@ if uploaded_file:
 else:
     st.info("请在左侧上传Events&Level配置表文件")
 
-# 侧边栏说明
-st.sidebar.markdown("---")
-st.sidebar.markdown("### ℹ️ 使用说明")
-st.sidebar.info("""
-1. 上传Events&Level配置表
-2. 系统自动分析表结构
-3. 查看Event Version分布图表
-4. 检查配置表中的缺失记录
-""")
 
-# 添加样式
-st.markdown("""
-<style>
-    .stDataFrame {
-        font-size: 0.9rem;
-    }
-    .metric-container {
-        background-color: #f8f9fa;
-        padding: 10px;
-        border-radius: 5px;
-    }
-</style>
-""", unsafe_allow_html=True)
