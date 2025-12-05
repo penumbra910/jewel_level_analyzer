@@ -23,7 +23,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🎯 关卡模拟分析报告")
+st.title("🎯 模拟分析")
 st.markdown("---")
 
 # 文件上传区域
@@ -513,39 +513,3 @@ if st.session_state.report_generated:
             href = f'<a href="data:text/html;base64,{b64}" download="{filename}">📥 下载HTML报告</a>'
             st.markdown(href, unsafe_allow_html=True)
     
-    
-    # 数据预览部分
-    st.markdown("---")
-    st.markdown("### 📊 数据预览")
-    
-    preview_tab1, preview_tab2, preview_tab3 = st.tabs(["汇总统计", "关卡指标", "异常检测"])
-    
-    with preview_tab1:
-        st.dataframe(st.session_state.summary_table, use_container_width=True)
-    
-    with preview_tab2:
-        st.dataframe(st.session_state.df_level, use_container_width=True)
-    
-    with preview_tab3:
-        if st.session_state.abnormal_table is not None and len(st.session_state.abnormal_table) > 0:
-            st.dataframe(st.session_state.abnormal_table, use_container_width=True)
-        else:
-            st.success("✅ 未检测到异常关卡")
-
-# 侧边栏信息
-st.sidebar.markdown("---")
-st.sidebar.markdown("### ℹ️ 使用说明")
-st.sidebar.info("""
-1. 上传模拟统计数据 (JSON格式)
-2. 上传关卡配置表 (Excel格式)
-3. 系统自动处理并生成分析报告
-4. 查看HTML报告并下载
-""")
-
-st.sidebar.markdown("### 📄 报告功能")
-st.sidebar.success("""
-- 自动生成完整HTML报告
-- 网页预览和HTML源码查看
-- 一键下载报告文件
-- 异常关卡数据导出
-""")
