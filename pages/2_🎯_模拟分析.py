@@ -341,7 +341,7 @@ def create_chart1(df_level):
         margin=dict(l=80, r=0, t=40, b=80),
         legend_title='指标',
         legend=dict(
-            x=0.7,       
+            x=0.9,       
             y=1.2,   
             xanchor='right',  
             yanchor='top',    
