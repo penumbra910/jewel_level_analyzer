@@ -25,7 +25,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🎯 关卡模拟分析报告")
+st.title("🎯 模拟分析")
 st.markdown("---")
 
 # 文件上传区域
@@ -62,6 +62,10 @@ if 'table2_html' not in st.session_state:
     st.session_state.table2_html = None
 if 'table3_html' not in st.session_state:
     st.session_state.table3_html = None
+if 'total_levels' not in st.session_state:
+    st.session_state.total_levels = 0
+if 'overall_win_rate' not in st.session_state:
+    st.session_state.overall_win_rate = 0
 
 def load_and_process_data(stats_file, config_file):
     """加载和处理数据"""
@@ -78,7 +82,8 @@ def load_and_process_data(stats_file, config_file):
         df_fuuu = df_fuuu[['level_id', 'fuuu']]
         df = pd.merge(df, df_fuuu, on=['level_id'], how='left')
         
-        # 3. 加载配置表
+        # 3. 加载配置表（从Events&Level_upload_*.xlsx文件）
+        # 读取target数据
         df_target = pd.read_excel(config_file, sheet_name='level_conf')
         df_target = df_target[['level_name', 'target']]
         df_target = df_target.drop([0, 1]).reset_index(drop=True)
@@ -150,14 +155,42 @@ def load_and_process_data(stats_file, config_file):
         df['fuuu_result'] = df.apply(calculate_fuuu_result, axis=1)
         df['fuuu_error'] = (df['fuuu_result'] - df['fuuu']).clip(lower=-10, upper=10)
         
-        return df, df_target_final
+        # 5. 读取关卡评估和推荐难度（从level_conf或其他sheet）
+        try:
+            # 尝试从level_conf sheet中读取evaluation和rec_difficulty
+            df_level_summary = pd.read_excel(config_file, sheet_name='level_conf')
+            # 检查是否有evaluation和rec_difficulty列
+            if 'evaluation' in df_level_summary.columns and 'rec_difficulty' in df_level_summary.columns:
+                df_level_summary = df_level_summary[['level_name', 'evaluation', 'rec_difficulty']]
+                df_level_summary = df_level_summary.drop([0, 1]).reset_index(drop=True)
+            else:
+                # 如果没有，尝试读取其他sheet
+                try:
+                    df_level_summary = pd.read_excel(config_file, sheet_name='level_summary')
+                    df_level_summary = df_level_summary[['level_name', 'evaluation', 'rec_difficulty']]
+                    df_level_summary = df_level_summary.drop([0, 1]).reset_index(drop=True)
+                except:
+                    # 如果都没有，创建空DataFrame
+                    df_level_summary = pd.DataFrame(columns=['level_name', 'evaluation', 'rec_difficulty'])
+                    df_level_summary['level_name'] = df['level_name'].unique()
+                    df_level_summary['evaluation'] = ''
+                    df_level_summary['rec_difficulty'] = ''
+        except Exception as e:
+            st.warning(f"读取关卡评估数据时出错: {e}")
+            # 创建空DataFrame
+            df_level_summary = pd.DataFrame(columns=['level_name', 'evaluation', 'rec_difficulty'])
+            df_level_summary['level_name'] = df['level_name'].unique()
+            df_level_summary['evaluation'] = ''
+            df_level_summary['rec_difficulty'] = ''
+        
+        return df, df_target_final, df_level_summary
         
     except Exception as e:
         st.error(f"数据处理错误: {str(e)}")
-        return None, None
+        return None, None, None
 
 def generate_summary(df):
-    """生成汇总统计"""
+    """生成汇总统计 - 基于全部关卡"""
     loop_count = df[df['level_id'] == 1].shape[0]
     avg_user_ability = df['user_ability'].mean()
     total_count = len(df)
@@ -200,8 +233,8 @@ def generate_summary(df):
     }
     return pd.DataFrame(summary_data)
 
-def generate_level_metrics(df):
-    """生成关卡级别指标"""
+def generate_level_metrics(df, df_level_summary):
+    """生成关卡级别指标 - 包含全部关卡"""
     grouped = df.groupby(['level_id', 'level_name'])
     win_df = df[df['is_win'] == True].copy()
     
@@ -220,6 +253,12 @@ def generate_level_metrics(df):
         avg_win_slide,
         var_steps
     ], axis=1).reset_index().round(2)
+    
+    # 合并关卡评估和推荐难度
+    df_level_new = pd.merge(df_level_new, df_level_summary, on='level_name', how='left')
+    
+    # 填充缺失值
+    df_level_new[['evaluation', 'rec_difficulty']] = df_level_new[['evaluation', 'rec_difficulty']].fillna('')
     
     return df_level_new
 
@@ -263,7 +302,7 @@ def check_abnormal_levels(df_level, df_limits):
             abnormal_rows.append({
                 "level_id": row["level_id"],
                 "level_name": row["level_name"],
-                "fuuu": round(fuuu_val, 2),
+                "fuuu": round(fuuu_val, 0),
                 "平均步数": row["平均步数"],
                 "首赢率": row["首赢率"],
                 "步数方差": row["步数方差"],
@@ -272,8 +311,11 @@ def check_abnormal_levels(df_level, df_limits):
     
     return pd.DataFrame(abnormal_rows)
 
-def create_chart1(df_level_filtered):
-    """创建第一个图表：关卡指标趋势"""
+def create_chart1(df_level):
+    """创建第一个图表：关卡指标趋势（显示前80关）"""
+    # 只显示前80关用于图表展示
+    df_level_filtered = df_level[df_level['level_id'] <= 80].copy()
+    
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # 添加平均获胜步数的线
@@ -292,7 +334,7 @@ def create_chart1(df_level_filtered):
     
     # 设置坐标轴标题
     fig.update_layout(
-        title='关卡指标趋势',
+        title='关卡指标趋势（前80关）',
         xaxis_title='关卡ID',
         height=500,
         margin=dict(l=80, r=0, t=40, b=80),
@@ -345,6 +387,23 @@ def create_chart2(df):
     
     return fig
 
+def format_level_evaluation(val):
+    """格式化关卡评估列"""
+    if pd.isna(val) or str(val).strip() == '':
+        return val
+    
+    # 如果值是字符串，处理颜色标记
+    val_str = str(val)
+    numbers = val_str.split(',')
+    formatted_numbers = []
+    for num in numbers:
+        num = num.strip()
+        if num.startswith('-'):
+            formatted_numbers.append(f'<span style="color:red;">{num}</span>')
+        else:
+            formatted_numbers.append(num)
+    return ','.join(formatted_numbers)
+
 def generate_html_report():
     """生成HTML报告"""
     try:
@@ -384,35 +443,46 @@ def plotly_to_html(fig):
 if uploaded_stats and uploaded_config:
     with st.spinner("正在处理数据..."):
         # 处理数据
-        df, df_target_final = load_and_process_data(uploaded_stats, uploaded_config)
+        df, df_target_final, df_level_summary = load_and_process_data(uploaded_stats, uploaded_config)
         
         if df is not None:
             # 保存到session state
             st.session_state.df = df
             
-            # 1. 生成汇总统计
+            # 1. 生成汇总统计（基于全部关卡）
             summary_df = generate_summary(df)
             st.session_state.summary_table = summary_df
             st.session_state.table1_html = summary_df.to_html(classes='table table-striped', index=False)
             
-            # 2. 生成关卡级别指标
-            df_level = generate_level_metrics(df)
+            # 2. 生成关卡级别指标（全部关卡）
+            df_level = generate_level_metrics(df, df_level_summary)
+            
+            # 保存关键指标用于显示
+            st.session_state.total_levels = df['level_name'].nunique()
+            st.session_state.overall_win_rate = df['is_win'].mean()
             
             # 3. 检查异常关卡
             df_limits_df = pd.DataFrame(FUUU_LIMITS_DATA)
             abnormal_df = check_abnormal_levels(df_level, df_limits_df)
             st.session_state.abnormal_table = abnormal_df
             
-            # 4. 合并目标物数量
-            df_level = pd.merge(df_level, df_target_final, on='level_name', how='left')
-            df_level_filtered = df_level[df_level['level_id'] <= 80]
+            # 保存完整关卡数据
+            st.session_state.df_level = df_level
             
-            st.session_state.df_level = df_level_filtered
+            # 4. 生成HTML表格数据
+            # table2：完整关卡数据（按照原始代码的格式）
+            df_level_display = df_level.copy()
+            # 选择需要的列并重命名
+            df_level_display = df_level_display[[
+                'level_id', 'level_name', 'fuuu', '首赢率', 
+                '平均步数', '平均获胜步数', '步数方差', 
+                'evaluation', 'rec_difficulty'
+            ]]
             
-            # 5. 生成HTML表格和图表
-            # 生成table2（关卡数据）
-            df_level_display = df_level_filtered.copy()
-            df_level_display = df_level_display[['level_id', 'level_name', 'fuuu', '首赢率', '平均步数', '平均获胜步数', '步数方差']]
+            # 格式化evaluation列
+            df_level_display['evaluation'] = df_level_display['evaluation'].apply(format_level_evaluation)
+            
+            # 重命名列
             df_level_display.rename(columns={
                 'level_id': '关卡ID',
                 'level_name': '关卡名称',
@@ -420,8 +490,11 @@ if uploaded_stats and uploaded_config:
                 '首赢率': '首赢率',
                 '平均步数': '平均步数',
                 '平均获胜步数': '平均获胜步数',
-                '步数方差': '步数方差'
+                '步数方差': '步数方差',
+                'evaluation': '关卡评估',
+                'rec_difficulty': '推荐难度'
             }, inplace=True)
+            
             st.session_state.table2_html = df_level_display.to_html(classes='table table-striped', index=False, escape=False)
             
             # 生成table3（异常关卡）
@@ -430,8 +503,8 @@ if uploaded_stats and uploaded_config:
             else:
                 st.session_state.table3_html = "<p>没有发现异常关卡</p>"
             
-            # 生成图表数据
-            chart1 = create_chart1(df_level_filtered)
+            # 5. 生成图表数据
+            chart1 = create_chart1(df_level)  # 图表只显示前80关
             chart2 = create_chart2(df)
             
             st.session_state.chart_html1 = plotly_to_html(chart1)
@@ -440,24 +513,24 @@ if uploaded_stats and uploaded_config:
             st.success("数据处理完成！")
             st.session_state.report_generated = True
 else:
-    st.info("请先在左侧上传模拟统计数据(simulatorStatistics.json)和关卡配置表(xlsx)")
+    st.info("请先在左侧上传模拟统计数据(simulatorStatistics.json)和关卡配置表(Events&Level_upload_*.xlsx)")
 
 # 显示结果和报告
 if st.session_state.report_generated:
-    # 先在Streamlit中显示关键结果
+    # 先在Streamlit中显示关键结果（基于全部关卡）
     st.markdown("### 📊 关键指标")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("总关卡数", st.session_state.df_level.shape[0])
+        st.metric("总关卡数", st.session_state.total_levels)
     
     with col2:
-        win_rate = st.session_state.df['is_win'].mean()
-        st.metric("总体首赢率", f"{win_rate:.1%}")
+        st.metric("总体首赢率", f"{st.session_state.overall_win_rate:.1%}")
     
     with col3:
         if st.session_state.abnormal_table is not None:
-            st.metric("异常关卡数", len(st.session_state.abnormal_table))
+            abnormal_count = len(st.session_state.abnormal_table)
+            st.metric("异常关卡数", abnormal_count)
     
     # 显示图表
     st.markdown("### 📈 分析图表")
@@ -467,6 +540,7 @@ if st.session_state.report_generated:
     with tab1:
         if st.session_state.chart_html1:
             st.components.v1.html(st.session_state.chart_html1, height=550)
+            st.caption("注：图表显示前80关的趋势，完整数据可在下方表格查看")
     
     with tab2:
         if st.session_state.chart_html2:
@@ -481,7 +555,20 @@ if st.session_state.report_generated:
         st.dataframe(st.session_state.summary_table, use_container_width=True)
     
     with data_tabs[1]:
-        st.dataframe(st.session_state.df_level, use_container_width=True)
+        # 显示完整关卡数据
+        display_df = st.session_state.df_level.copy()
+        display_df = display_df[[
+            'level_id', 'level_name', 'fuuu', '首赢率', 
+            '平均步数', '平均获胜步数', '步数方差', 
+            'evaluation', 'rec_difficulty'
+        ]]
+        display_df.rename(columns={
+            'level_id': '关卡ID',
+            'level_name': '关卡名称',
+            'evaluation': '关卡评估',
+            'rec_difficulty': '推荐难度'
+        }, inplace=True)
+        st.dataframe(display_df, use_container_width=True)
     
     with data_tabs[2]:
         if st.session_state.abnormal_table is not None and len(st.session_state.abnormal_table) > 0:
@@ -568,36 +655,3 @@ if st.session_state.report_generated:
                 with st.expander("查看HTML源码"):
                     st.code(html_content[:5000] + "..." if len(html_content) > 5000 else html_content, language='html')
 
-# 侧边栏信息
-st.sidebar.markdown("---")
-st.sidebar.markdown("### ℹ️ 使用说明")
-st.sidebar.info("""
-1. 上传模拟统计数据 (JSON格式)
-2. 上传关卡配置表 (Excel格式)
-3. 系统自动处理并显示分析结果
-4. 点击"生成完整HTML报告"查看和下载报告
-""")
-
-st.sidebar.markdown("### 📊 分析内容")
-st.sidebar.success("""
-- 汇总统计指标
-- 关卡指标趋势图表
-- FUUU Error分布
-- 异常关卡检测
-- 完整HTML报告生成
-""")
-
-# 添加样式
-st.markdown("""
-<style>
-    .stButton > button {
-        width: 100%;
-    }
-    .css-1d391kg {
-        padding-top: 2rem;
-    }
-    .report-container {
-        font-family: Arial, sans-serif;
-    }
-</style>
-""", unsafe_allow_html=True)
