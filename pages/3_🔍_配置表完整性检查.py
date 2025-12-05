@@ -78,68 +78,13 @@ def create_version_completeness_chart(df_level_group):
             mode='markers',
             marker=dict(
                 symbol='diamond',
-                size=14,
+                size=10,
                 color=color_map[version],
-                opacity=0.9,
-                line=dict(
-                    width=2,
-                    color='white'
-                )
+                opacity=1
             ),
             name=f'Version {version}',
             hovertemplate='<b>Event ID:</b> %{x}<br><b>Version:</b> %{y}<extra></extra>'
         ))
-    
-    # 更新布局
-    fig.update_layout(
-        title=dict(
-            text='📊 Event Version 完整性',
-            font=dict(size=20, color='#2c3e50'),
-            x=0.5,
-            xanchor='center'
-        ),
-        xaxis_title=dict(
-            text='Event ID',
-            font=dict(size=14, color='#34495e')
-        ),
-        yaxis_title=dict(
-            text='AP Config Version',
-            font=dict(size=14, color='#34495e')
-        ),
-        showlegend=True,
-        legend=dict(
-            title=dict(
-                text="版本颜色标识",
-                font=dict(size=12, color='#2c3e50')
-            ),
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.02,
-            bgcolor='rgba(255, 255, 255, 0.9)',
-            bordercolor='rgba(52, 73, 94, 0.3)',
-            borderwidth=1,
-            font=dict(size=11)
-        ),
-        yaxis=dict(
-            tickvals=unique_versions,
-            gridcolor='rgba(189, 195, 199, 0.3)',
-            tickfont=dict(size=12)
-        ),
-        xaxis=dict(
-            gridcolor='rgba(189, 195, 199, 0.3)',
-            tickfont=dict(size=11)
-        ),
-        height=600,
-        margin=dict(l=70, r=150, t=100, b=70),
-        plot_bgcolor='rgba(236, 240, 241, 0.3)',
-        paper_bgcolor='white',
-        hovermode='closest'
-    )
-    
-    # 添加网格线
-    fig.update_xaxes(showgrid=True, gridwidth=1, zeroline=False)
-    fig.update_yaxes(showgrid=True, gridwidth=1, zeroline=False)
     
     return fig
 
