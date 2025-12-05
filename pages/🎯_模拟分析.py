@@ -365,57 +365,37 @@ def format_level_evaluation(val):
 def generate_html_report():
     """生成HTML报告"""
     try:
-        # 设置Jinja2环境
-        env = Environment(loader=FileSystemLoader('.'))
-        template = env.get_template('template.html')
+        # 读取template.html
+        with open('template.html', 'r', encoding='utf-8') as f:
+            template_content = f.read()
         
-        # 渲染模板
-        rendered_html = template.render(
-            title='Jewel Simulation Report',
-            subtitle1='Summary',
-            subtitle2='Level',
-            subtitle3='Event',
-            table1=st.session_state.table1, 
-            chart_data1=st.session_state.chart_data1, 
-            chart_data2=st.session_state.chart_data2,  
-            table2=st.session_state.table2, 
-            table3=st.session_state.table3, 
-        )
+        # 替换占位符
+        html_content = template_content
+        replacements = {
+            '{{ table1 }}': st.session_state.table1_html,
+            '{{ chart_data1 }}': st.session_state.chart_html1,
+            '{{ chart_data2 }}': st.session_state.chart_html2,
+            '{{ table2 }}': st.session_state.table2_html,
+            '{{ table3 }}': st.session_state.table3_html,
+            '{{ title }}': 'Jewel Simulation Report',
+            '{{ subtitle1 }}': 'Summary',
+            '{{ subtitle2 }}': 'Level',
+            '{{ subtitle3 }}': 'Event'
+        }
         
-        return rendered_html
+        for placeholder, value in replacements.items():
+            if value:
+                html_content = html_content.replace(placeholder, value)
+        
+        return html_content
         
     except Exception as e:
         st.error(f"生成HTML报告时出错: {str(e)}")
         return None
 
-def display_html_report(html_content):
-    """在Streamlit中显示HTML报告"""
-    # 使用iframe显示HTML
-    html_with_base = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            body {{
-                margin: 0;
-                padding: 0;
-                overflow: hidden;
-            }}
-            iframe {{
-                border: none;
-                width: 100%;
-                height: 800px;
-            }}
-        </style>
-    </head>
-    <body>
-        {html_content}
-    </body>
-    </html>
-    """
-    
-    st.components.v1.html(html_with_base, height=800, scrolling=True)
+def plotly_to_html(fig):
+    """将plotly图表转换为HTML字符串"""
+    return pio.to_html(fig, full_html=False, include_plotlyjs='cdn')
 
 # 主处理流程
 if uploaded_stats and uploaded_config:
@@ -430,7 +410,7 @@ if uploaded_stats and uploaded_config:
             # 1. 生成汇总统计
             summary_df = generate_summary(df)
             st.session_state.summary_table = summary_df
-            st.session_state.table1 = summary_df.to_html(classes='table', index=False)
+            st.session_state.table1_html = summary_df.to_html(classes='table table-striped', index=False)
             
             # 2. 生成关卡级别指标
             df_level = generate_level_metrics(df)
@@ -449,7 +429,7 @@ if uploaded_stats and uploaded_config:
             # 5. 生成HTML表格和图表
             # 生成table2（关卡数据）
             df_level_display = df_level_filtered.copy()
-            # 重命名列
+            df_level_display = df_level_display[['level_id', 'level_name', 'fuuu', '首赢率', '平均步数', '平均获胜步数', '步数方差']]
             df_level_display.rename(columns={
                 'level_id': '关卡ID',
                 'level_name': '关卡名称',
@@ -457,20 +437,22 @@ if uploaded_stats and uploaded_config:
                 '首赢率': '首赢率',
                 '平均步数': '平均步数',
                 '平均获胜步数': '平均获胜步数',
-                '步数方差': '步数方差',
-                'totaltarget': '目标物总数'
+                '步数方差': '步数方差'
             }, inplace=True)
-            st.session_state.table2 = df_level_display.to_html(classes='table', index=False, escape=False)
+            st.session_state.table2_html = df_level_display.to_html(classes='table table-striped', index=False, escape=False)
             
             # 生成table3（异常关卡）
             if len(abnormal_df) > 0:
-                st.session_state.table3 = abnormal_df.to_html(classes='table', index=False)
+                st.session_state.table3_html = abnormal_df.to_html(classes='table table-striped', index=False)
             else:
-                st.session_state.table3 = "<p>没有发现异常关卡</p>"
+                st.session_state.table3_html = "<p>没有发现异常关卡</p>"
             
             # 生成图表数据
-            st.session_state.chart_data1 = create_plotly_chart1(df_level_filtered)
-            st.session_state.chart_data2 = create_plotly_chart2(df)
+            chart1 = create_chart1(df_level_filtered)
+            chart2 = create_chart2(df)
+            
+            st.session_state.chart_html1 = plotly_to_html(chart1)
+            st.session_state.chart_html2 = plotly_to_html(chart2)
             
             st.success("数据处理完成！")
             st.session_state.report_generated = True
@@ -479,37 +461,126 @@ else:
 
 # 显示结果和报告
 if st.session_state.report_generated:
-    # 显示报告预览
-    st.markdown("### 📋 报告预览")
-    
-    # 添加标签页
-    tab1, tab2 = st.tabs(["网页预览", "HTML代码"])
-    
-    with tab1:
-        # 生成HTML报告
-        html_content = generate_html_report()
-        if html_content:
-            st.session_state.html_report = html_content
-            
-            # 显示HTML报告
-            display_html_report(html_content)
-    
-    with tab2:
-        if st.session_state.html_report:
-            # 显示HTML源代码
-            st.code(st.session_state.html_report[:5000] + "..." if len(st.session_state.html_report) > 5000 else st.session_state.html_report, language='html')
-    
-    # 下载按钮
-    st.markdown("---")
-    st.markdown("### 💾 下载报告")
-    
-    col1, col2 = st.columns(2)
+    # 先在Streamlit中显示关键结果
+    st.markdown("### 📊 关键指标")
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.session_state.html_report:
-            # 下载HTML报告
-            b64 = base64.b64encode(st.session_state.html_report.encode()).decode()
-            filename = f"level_simulation_report_{datetime.now().strftime('%Y%m%d_%H%M')}.html"
-            href = f'<a href="data:text/html;base64,{b64}" download="{filename}">📥 下载HTML报告</a>'
-            st.markdown(href, unsafe_allow_html=True)
+        st.metric("总关卡数", st.session_state.df_level.shape[0])
     
+    with col2:
+        win_rate = st.session_state.df['is_win'].mean()
+        st.metric("总体首赢率", f"{win_rate:.1%}")
+    
+    with col3:
+        if st.session_state.abnormal_table is not None:
+            st.metric("异常关卡数", len(st.session_state.abnormal_table))
+    
+    # 显示图表
+    st.markdown("### 📈 分析图表")
+    
+    tab1, tab2 = st.tabs(["关卡指标趋势", "FUUU Error分布"])
+    
+    with tab1:
+        if st.session_state.chart_html1:
+            st.components.v1.html(st.session_state.chart_html1, height=550)
+    
+    with tab2:
+        if st.session_state.chart_html2:
+            st.components.v1.html(st.session_state.chart_html2, height=550)
+    
+    # 显示数据表格
+    st.markdown("### 📋 详细数据")
+    
+    data_tabs = st.tabs(["汇总统计", "关卡指标", "异常检测"])
+    
+    with data_tabs[0]:
+        st.dataframe(st.session_state.summary_table, use_container_width=True)
+    
+    with data_tabs[1]:
+        st.dataframe(st.session_state.df_level, use_container_width=True)
+    
+    with data_tabs[2]:
+        if st.session_state.abnormal_table is not None and len(st.session_state.abnormal_table) > 0:
+            st.dataframe(st.session_state.abnormal_table, use_container_width=True)
+        else:
+            st.success("✅ 未检测到异常关卡")
+    
+    st.markdown("---")
+    
+    # HTML报告部分
+    st.markdown("### 📄 HTML报告生成")
+    
+    # 生成并显示HTML报告
+    if st.button("生成完整HTML报告", type="primary"):
+        with st.spinner("正在生成HTML报告..."):
+            html_content = generate_html_report()
+            if html_content:
+                st.session_state.html_report = html_content
+                
+                # 在Streamlit中显示报告
+                st.markdown("#### 报告预览")
+                
+                # 方法1：使用iframe显示完整报告
+                html_with_wrapper = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body {{
+                            margin: 0;
+                            padding: 20px;
+                            background-color: #f0f2f6;
+                        }}
+                        .report-container {{
+                            max-width: 1200px;
+                            margin: 0 auto;
+                            background: white;
+                            padding: 30px;
+                            border-radius: 10px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div class="report-container">
+                        {html_content}
+                    </div>
+                </body>
+                </html>
+                """
+                
+                # 显示HTML报告
+                st.components.v1.html(html_with_wrapper, height=1000, scrolling=True)
+                
+                # 下载按钮
+                st.markdown("---")
+                st.markdown("#### 💾 下载报告")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # 下载HTML报告
+                    b64 = base64.b64encode(html_content.encode()).decode()
+                    filename = f"level_simulation_report_{datetime.now().strftime('%Y%m%d_%H%M')}.html"
+                    href = f'<a href="data:text/html;base64,{b64}" download="{filename}" style="text-decoration: none;">' \
+                           f'<button style="background-color: #4CAF50; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">' \
+                           f'📥 下载HTML报告</button></a>'
+                    st.markdown(href, unsafe_allow_html=True)
+                
+                with col2:
+                    # 下载异常关卡数据
+                    if st.session_state.abnormal_table is not None and len(st.session_state.abnormal_table) > 0:
+                        csv = st.session_state.abnormal_table.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 下载异常关卡数据(CSV)",
+                            data=csv,
+                            file_name=f"abnormal_levels_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                            mime="text/csv",
+                            type="primary"
+                        )
+                
+                # 提供查看HTML源码的选项
+                with st.expander("查看HTML源码"):
+                    st.code(html_content[:5000] + "..." if len(html_content) > 5000 else html_content, language='html')
