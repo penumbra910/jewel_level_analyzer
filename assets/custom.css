@@ -1,0 +1,17 @@
+/* 调整sidebar标题大小 */
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    font-size: 1.5rem !important;
+}
+
+/* 调整sidebar所有文字大小 */
+[data-testid="stSidebar"] * {
+    font-size: 1.1rem !important;
+}
+
+/* 调整sidebar中的小标题 */
+[data-testid="stSidebar"] .st-emotion-cache-16idsys p {
+    font-size: 1.2rem !important;
+    font-weight: bold !important;
+}
