@@ -82,16 +82,21 @@ def create_version_completeness_chart(df_level_group):
                 color=color_map[version],
                 opacity=1
             ),
-            name=f'Version {version}',
+            name='',  # 设置为空字符串
+            showlegend=False,  # 明确设置为不显示图例
             hovertemplate='<b>Event ID:</b> %{x}<br><b>Version:</b> %{y}<extra></extra>'
         ))
 
-        fig.update_layout(
-            xaxis_title='EventID',
-            yaxis_title='Version',
-            legend=False,
-            height=500
-        )
+    fig.update_layout(
+        xaxis_title='EventID',
+        yaxis_title='Version',
+        showlegend=False, 
+        yaxis=dict(
+            tickvals=unique_versions,
+            tickmode='array'
+        ),
+        height=500
+    )
     
     return fig
 
