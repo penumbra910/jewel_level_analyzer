@@ -19,10 +19,6 @@ warnings.filterwarnings("ignore")
 from config import FUUU_NEW, MULTIPLIER, FUUU_LIMITS_DATA
 
 
-from utils.style_utils import load_custom_css
-
-# 加载自定义CSS
-load_custom_css()
 # 页面配置
 st.set_page_config(
     page_title="模拟分析",
