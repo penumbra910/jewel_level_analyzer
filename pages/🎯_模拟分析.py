@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import plotly.offline as pyo
+import plotly.io as pio
 from datetime import datetime
 import io
 import json
@@ -12,6 +12,8 @@ import os
 import tempfile
 import base64
 from jinja2 import Environment, FileSystemLoader
+import warnings
+warnings.filterwarnings("ignore")
 
 # 从config导入配置
 from config import FUUU_NEW, MULTIPLIER, FUUU_LIMITS_DATA
@@ -23,7 +25,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🎯 模拟分析")
+st.title("🎯 关卡模拟分析报告")
 st.markdown("---")
 
 # 文件上传区域
@@ -50,16 +52,16 @@ if 'html_report' not in st.session_state:
     st.session_state.html_report = None
 if 'report_generated' not in st.session_state:
     st.session_state.report_generated = False
-if 'chart_data1' not in st.session_state:
-    st.session_state.chart_data1 = None
-if 'chart_data2' not in st.session_state:
-    st.session_state.chart_data2 = None
-if 'table1' not in st.session_state:
-    st.session_state.table1 = None
-if 'table2' not in st.session_state:
-    st.session_state.table2 = None
-if 'table3' not in st.session_state:
-    st.session_state.table3 = None
+if 'chart_html1' not in st.session_state:
+    st.session_state.chart_html1 = None
+if 'chart_html2' not in st.session_state:
+    st.session_state.chart_html2 = None
+if 'table1_html' not in st.session_state:
+    st.session_state.table1_html = None
+if 'table2_html' not in st.session_state:
+    st.session_state.table2_html = None
+if 'table3_html' not in st.session_state:
+    st.session_state.table3_html = None
 
 def load_and_process_data(stats_file, config_file):
     """加载和处理数据"""
@@ -270,31 +272,31 @@ def check_abnormal_levels(df_level, df_limits):
     
     return pd.DataFrame(abnormal_rows)
 
-def create_plotly_chart1(df_level_filtered_80):
+def create_chart1(df_level_filtered):
     """创建第一个图表：关卡指标趋势"""
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # 添加平均获胜步数的线
     fig.add_trace(
-        go.Scatter(x=df_level_filtered_80['level_id'], y=df_level_filtered_80['平均获胜步数'], 
+        go.Scatter(x=df_level_filtered['level_id'], y=df_level_filtered['平均获胜步数'], 
                    mode='lines+markers', name='平均获胜步数', line=dict(color='red')),
         secondary_y=False
     )
     
     # 添加fuuu的线
     fig.add_trace(
-        go.Scatter(x=df_level_filtered_80['level_id'], y=df_level_filtered_80['fuuu'], 
+        go.Scatter(x=df_level_filtered['level_id'], y=df_level_filtered['fuuu'], 
                    mode='lines+markers', name='fuuu', line=dict(color='blue')),
         secondary_y=True
     )
     
     # 设置坐标轴标题
     fig.update_layout(
-        title='Goal Number and Average Steps by LevelID',
-        xaxis_title='LevelID',
-        height=600,
+        title='关卡指标趋势',
+        xaxis_title='关卡ID',
+        height=500,
         margin=dict(l=80, r=0, t=40, b=80),
-        legend_title='Metrics',
+        legend_title='指标',
         legend=dict(
             x=0.7,       
             y=1.2,   
@@ -308,10 +310,9 @@ def create_plotly_chart1(df_level_filtered_80):
     fig.update_yaxes(title_text='平均获胜步数', secondary_y=False, showgrid=False)
     fig.update_yaxes(title_text='fuuu', secondary_y=True, showgrid=False)
     
-    # 生成图表div
-    return pyo.plot(fig, include_plotlyjs=False, output_type='div')
+    return fig
 
-def create_plotly_chart2(df):
+def create_chart2(df):
     """创建第二个图表：FUUU Error分布"""
     bins = np.arange(-10, 11 + 1) - 0.5
     fuuu_error_hist = np.histogram(df['fuuu_error'], bins=bins)
@@ -331,36 +332,18 @@ def create_plotly_chart2(df):
     
     # 更新布局
     fig.update_layout(
-        title='FUUU Error Histograms (Percentage)',
+        title='FUUU Error分布',
         xaxis_title='FUUU Error',
-        yaxis_title='Percentage (%)',
+        yaxis_title='百分比 (%)',
         barmode='overlay',
         xaxis=dict(tickvals=np.arange(-10, 11, 1)),
         legend=dict(title='', traceorder='normal', orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
-        height=600
+        height=500
     )
     
     fig.update_yaxes(tickformat=".1%")
     
-    # 生成图表div
-    return pyo.plot(fig, include_plotlyjs=False, output_type='div')
-
-def format_level_evaluation(val):
-    """格式化关卡评估列"""
-    if pd.isna(val) or str(val).strip() == '':
-        return val
-    
-    # 如果值是字符串，处理颜色标记
-    val_str = str(val)
-    numbers = val_str.split(',')
-    formatted_numbers = []
-    for num in numbers:
-        num = num.strip()
-        if num.startswith('-'):
-            formatted_numbers.append(f'<span style="color:red;">{num}</span>')
-        else:
-            formatted_numbers.append(num)
-    return ','.join(formatted_numbers)
+    return fig
 
 def generate_html_report():
     """生成HTML报告"""
@@ -584,3 +567,37 @@ if st.session_state.report_generated:
                 # 提供查看HTML源码的选项
                 with st.expander("查看HTML源码"):
                     st.code(html_content[:5000] + "..." if len(html_content) > 5000 else html_content, language='html')
+
+# 侧边栏信息
+st.sidebar.markdown("---")
+st.sidebar.markdown("### ℹ️ 使用说明")
+st.sidebar.info("""
+1. 上传模拟统计数据 (JSON格式)
+2. 上传关卡配置表 (Excel格式)
+3. 系统自动处理并显示分析结果
+4. 点击"生成完整HTML报告"查看和下载报告
+""")
+
+st.sidebar.markdown("### 📊 分析内容")
+st.sidebar.success("""
+- 汇总统计指标
+- 关卡指标趋势图表
+- FUUU Error分布
+- 异常关卡检测
+- 完整HTML报告生成
+""")
+
+# 添加样式
+st.markdown("""
+<style>
+    .stButton > button {
+        width: 100%;
+    }
+    .css-1d391kg {
+        padding-top: 2rem;
+    }
+    .report-container {
+        font-family: Arial, sans-serif;
+    }
+</style>
+""", unsafe_allow_html=True)
