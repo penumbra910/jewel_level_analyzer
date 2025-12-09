@@ -243,11 +243,16 @@ def process_attribute(df_level_conf: pd.DataFrame) -> pd.DataFrame:
         
         return ','.join(sorted(attributes_set))
     
-    df_level_conf['attribute'] = df_level_conf['target'].apply(parse_target_attributes)
+    # 新增逻辑：
+    # 1. 先创建一个初始的attribute列，默认使用category的值
+    df_level_conf['attribute'] = df_level_conf['category'].astype(str)
     
-    # 新增：如果attribute为空，则使用category列的值
-    mask = (df_level_conf['attribute'] == "") & df_level_conf['category'].notna()
-    df_level_conf.loc[mask, 'attribute'] = df_level_conf.loc[mask, 'category']
+    # 2. 找出category为"collection"的行
+    collection_mask = df_level_conf['category'].astype(str).str.lower() == 'collection'
+    
+    # 3. 对这些行执行原有的target解析逻辑
+    if collection_mask.any():
+        df_level_conf.loc[collection_mask, 'attribute'] = df_level_conf.loc[collection_mask, 'target'].apply(parse_target_attributes)
     
     # 调整列顺序
     if 'target_num' in df_level_conf.columns:
@@ -257,7 +262,6 @@ def process_attribute(df_level_conf: pd.DataFrame) -> pd.DataFrame:
         df_level_conf = df_level_conf[cols]
     
     return df_level_conf
-
 
 def process_evaluation_conf(df_level_conf: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     """
