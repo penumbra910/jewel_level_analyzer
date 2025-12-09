@@ -245,6 +245,10 @@ def process_attribute(df_level_conf: pd.DataFrame) -> pd.DataFrame:
     
     df_level_conf['attribute'] = df_level_conf['target'].apply(parse_target_attributes)
     
+    # 新增：如果attribute为空，则使用category列的值
+    mask = (df_level_conf['attribute'] == "") & df_level_conf['category'].notna()
+    df_level_conf.loc[mask, 'attribute'] = df_level_conf.loc[mask, 'category']
+    
     # 调整列顺序
     if 'target_num' in df_level_conf.columns:
         target_num_idx = df_level_conf.columns.get_loc('target_num')
