@@ -406,7 +406,7 @@ def process_data():
         progress_placeholder.text("💾 保存处理结果...")
         
         # 生成Excel文件
-        result_bytes = generate_excel_output(df_level_conf_processed, df_level_group_processed)
+        result_bytes = generate_excel_output(df_processed, df_level_conf_processed, df_level_group_processed)
         
         progress_bar.progress(80)
         
