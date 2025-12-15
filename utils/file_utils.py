@@ -66,7 +66,8 @@ def validate_dataframes(df_raw: pd.DataFrame,
     return validation_results
 
 
-def generate_excel_output(df_level_conf: pd.DataFrame, 
+def generate_excel_output(df: pd.DataFrame, 
+                        df_level_conf: pd.DataFrame, 
                          df_level_group: pd.DataFrame) -> bytes:
     """
     生成Excel输出文件
@@ -74,6 +75,7 @@ def generate_excel_output(df_level_conf: pd.DataFrame,
     output = io.BytesIO()
     
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='level_data', index=False)
         df_level_conf.to_excel(writer, sheet_name='level_conf', index=False)
         df_level_group.to_excel(writer, sheet_name='level_group', index=False)
     
