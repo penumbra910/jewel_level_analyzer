@@ -44,80 +44,119 @@ def clean_dataframe_columns(df):
     if df is not None and not df.empty:
         # 去除列名中的空白字符
         df.columns = df.columns.str.strip()
-        # 确保所有字符串列都去除空白
-        for col in df.select_dtypes(include=['object']).columns:
-            df[col] = df[col].astype(str).str.strip()
     return df
 
-def skip_first_two_rows(df):
-    """跳过DataFrame的前两行（忽略表头之外的前两行数据）"""
-    if df is not None and len(df) > 2:
-        # 保留表头，跳过前两行数据
+def skip_first_two_data_rows(df):
+    """跳过DataFrame的第2行和第3行数据（保留表头，忽略第2-3行）"""
+    if df is not None and len(df) >= 3:  # 至少有表头+2行数据
+        # 保留表头，跳过第1行之后的两行数据（即第2行和第3行）
+        return df.iloc[3:].reset_index(drop=True)
+    elif df is not None and len(df) == 2:  # 只有表头+1行数据
         return df.iloc[2:].reset_index(drop=True)
     return df
 
 def get_clean_data(df):
-    """获取清理后的数据，跳过前两行"""
+    """获取清理后的数据，跳过第2-3行"""
     df = clean_dataframe_columns(df)
-    df = skip_first_two_rows(df)
+    df = skip_first_two_data_rows(df)
     return df
+
+def safe_sort_unique(values):
+    """安全地排序唯一值，处理混合类型"""
+    if len(values) == 0:
+        return []
+    
+    # 转换为字符串并去重
+    str_values = []
+    for v in values:
+        if pd.notna(v):
+            str_val = str(v).strip()
+            if str_val:  # 只添加非空字符串
+                str_values.append(str_val)
+    
+    # 去重
+    unique_values = list(set(str_values))
+    
+    # 尝试将可以转换为数字的值转换
+    numeric_values = []
+    non_numeric_values = []
+    
+    for val in unique_values:
+        try:
+            # 尝试转换为数字
+            if '.' in val or 'e' in val.lower():
+                # 尝试转换为浮点数
+                num_val = float(val)
+            else:
+                # 尝试转换为整数
+                num_val = int(val)
+            numeric_values.append(num_val)
+        except (ValueError, TypeError):
+            non_numeric_values.append(val)
+    
+    # 分别排序数字和非数字
+    numeric_values.sort()
+    non_numeric_values.sort()
+    
+    # 合并结果（数字在前，字符串在后）
+    result = numeric_values + non_numeric_values
+    return result
 
 def generate_first_60_levels(event_id, ap_config_version, df_level_group, df_level_conf):
     """
     生成前60关配置表
     """
     try:
-        # 将输入转换为字符串进行比较
-        event_id_str = str(event_id).strip()
-        ap_config_version_str = str(ap_config_version).strip()
-        
-        # 清理数据并跳过前两行
+        # 清理数据并跳过第2-3行
         df_level_group_clean = get_clean_data(df_level_group)
         df_level_conf_clean = get_clean_data(df_level_conf)
         
         # 显示调试信息
-        with st.expander("调试信息", expanded=False):
-            st.write(f"查找参数: event_id={event_id_str}, version={ap_config_version_str}")
-            st.write(f"level_group 数据行数: {len(df_level_group_clean)}")
-            st.write(f"level_conf 数据行数: {len(df_level_conf_clean)}")
+        with st.expander("数据调试信息", expanded=False):
+            st.write(f"查找参数: event_id={event_id}, version={ap_config_version}")
+            st.write(f"level_group原始数据行数: {len(df_level_group)}")
+            st.write(f"level_group清理后数据行数 (已忽略第2-3行): {len(df_level_group_clean)}")
+            st.write(f"level_conf原始数据行数: {len(df_level_conf)}")
+            st.write(f"level_conf清理后数据行数 (已忽略第2-3行): {len(df_level_conf_clean)}")
             if not df_level_group_clean.empty:
-                st.write("level_group 前几行数据:")
+                st.write("level_group清理后的前5行数据:")
                 st.dataframe(df_level_group_clean.head())
             if not df_level_conf_clean.empty:
-                st.write("level_conf 前几行数据:")
+                st.write("level_conf清理后的前5行数据:")
                 st.dataframe(df_level_conf_clean.head())
         
         if df_level_group_clean.empty or df_level_conf_clean.empty:
             st.error("数据为空，请检查Excel文件格式")
             return None
         
-        # 在level_group中查找匹配的行
-        # 先将所有列转换为字符串进行匹配
-        df_level_group_clean['event_id_str'] = df_level_group_clean['event_id'].astype(str).str.strip()
-        df_level_group_clean['ap_config_version_str'] = df_level_group_clean['ap_config_version'].astype(str).str.strip()
+        # 在level_group中查找匹配的行 - 使用字符串比较
+        found_row = None
+        search_event_id = str(event_id).strip()
+        search_version = str(ap_config_version).strip()
         
-        mask = (df_level_group_clean['event_id_str'] == event_id_str) & \
-               (df_level_group_clean['ap_config_version_str'] == ap_config_version_str)
-        
-        matching_rows = df_level_group_clean[mask]
-        
-        if len(matching_rows) == 0:
-            # 显示可用的选项
-            unique_events = sorted(df_level_group_clean['event_id_str'].unique())
-            unique_versions = sorted(df_level_group_clean['ap_config_version_str'].unique())
+        for _, row in df_level_group_clean.iterrows():
+            row_event_id = str(row.get('event_id', '')).strip()
+            row_version = str(row.get('ap_config_version', '')).strip()
             
-            st.error(f"未找到 event_id={event_id_str}, ap_config_version={ap_config_version_str} 的记录")
-            st.info(f"可用的 Event IDs: {', '.join(map(str, unique_events[:20]))}{'...' if len(unique_events) > 20 else ''}")
-            st.info(f"可用的 Versions: {', '.join(map(str, unique_versions[:20]))}{'...' if len(unique_versions) > 20 else ''}")
+            if row_event_id == search_event_id and row_version == search_version:
+                found_row = row
+                break
+        
+        if found_row is None:
+            # 显示可用的选项
+            unique_events = df_level_group_clean['event_id'].dropna().unique()
+            unique_versions = df_level_group_clean['ap_config_version'].dropna().unique()
+            
+            sorted_events = safe_sort_unique(unique_events)
+            sorted_versions = safe_sort_unique(unique_versions)
+            
+            st.error(f"未找到 event_id={search_event_id}, ap_config_version={search_version} 的记录")
+            st.info(f"可用的 Event IDs (前20个): {', '.join(map(str, sorted_events[:20]))}{'...' if len(sorted_events) > 20 else ''}")
+            st.info(f"可用的 Versions (前20个): {', '.join(map(str, sorted_versions[:20]))}{'...' if len(sorted_versions) > 20 else ''}")
             return None
         
-        if len(matching_rows) > 1:
-            st.warning(f"找到 {len(matching_rows)} 条匹配记录，将使用第一条")
-        
-        selected_row = matching_rows.iloc[0]
-        
         # 获取level_name_list
-        level_name_list_str = str(selected_row.get('level_name_list', ''))
+        level_name_list_str = str(found_row.get('level_name_list', ''))
         
         if pd.isna(level_name_list_str) or level_name_list_str.strip() == '':
             st.error("level_name_list为空")
@@ -129,6 +168,10 @@ def generate_first_60_levels(event_id, ap_config_version, df_level_group, df_lev
         # 只取前60个
         level_names = level_names[:60]
         
+        if not level_names:
+            st.error("level_name_list中没有有效的关卡名")
+            return None
+        
         # 创建基础DataFrame
         result_data = []
         
@@ -139,6 +182,8 @@ def generate_first_60_levels(event_id, ap_config_version, df_level_group, df_lev
                 level_name = str(row.get('level_name', '')).strip()
                 if level_name:
                     level_conf_dict[level_name] = row
+        
+        st.write(f"找到 {len(level_names)} 个关卡，正在从level_conf中查找对应信息...")
         
         for idx, level_name in enumerate(level_names, 1):
             # 在level_conf字典中查找对应的level
@@ -154,8 +199,20 @@ def generate_first_60_levels(event_id, ap_config_version, df_level_group, df_lev
             else:
                 # 处理difficulty：如果为0则显示为空
                 difficulty = level_conf_data.get('difficulty')
-                if difficulty == 0 or pd.isna(difficulty):
+                if pd.isna(difficulty):
                     difficulty = None
+                elif isinstance(difficulty, (int, float)):
+                    if difficulty == 0:
+                        difficulty = None
+                elif isinstance(difficulty, str):
+                    try:
+                        diff_val = float(difficulty)
+                        if diff_val == 0:
+                            difficulty = None
+                        else:
+                            difficulty = diff_val
+                    except:
+                        difficulty = None
                 
                 # 获取其他字段
                 target_type = level_conf_data.get('target_type')
@@ -191,18 +248,20 @@ def create_version_completeness_chart(df_level_group):
         if df_level_group.empty:
             return fig
         
-        # 清理数据并跳过前两行
+        # 清理数据并跳过第2-3行
         df_plot = get_clean_data(df_level_group)
         
         if df_plot.empty:
             return fig
         
-        # 将所有版本转换为字符串
-        df_plot['version_str'] = df_plot['ap_config_version'].astype(str).str.strip()
-        df_plot['event_id_str'] = df_plot['event_id'].astype(str).str.strip()
+        # 获取唯一的版本号
+        unique_versions = df_plot['ap_config_version'].dropna().unique()
         
-        # 获取唯一的版本号并排序
-        unique_versions = sorted(df_plot['version_str'].unique())
+        # 安全排序
+        sorted_versions = safe_sort_unique(unique_versions)
+        
+        if not sorted_versions:
+            return fig
         
         # 鲜艳的颜色方案
         bright_colors = [
@@ -222,27 +281,32 @@ def create_version_completeness_chart(df_level_group):
         
         # 为每个版本分配颜色
         color_map = {}
-        for i, version in enumerate(unique_versions):
-            color_map[version] = bright_colors[i % len(bright_colors)]
+        for i, version in enumerate(sorted_versions):
+            version_str = str(version)
+            color_map[version_str] = bright_colors[i % len(bright_colors)]
         
         # 遍历每个版本并添加散点
-        for version in unique_versions:
-            subset = df_plot[df_plot['version_str'] == version]
+        for version in sorted_versions:
+            version_str = str(version)
+            # 使用字符串匹配
+            mask = df_plot['ap_config_version'].astype(str).str.strip() == version_str
+            subset = df_plot[mask]
             
-            fig.add_trace(go.Scatter(
-                x=subset['event_id_str'],
-                y=subset['version_str'],
-                mode='markers',
-                marker=dict(
-                    symbol='diamond',
-                    size=10,
-                    color=color_map[version],
-                    opacity=1
-                ),
-                name='',  # 设置为空字符串
-                showlegend=False,  # 明确设置为不显示图例
-                hovertemplate='<b>Event ID:</b> %{x}<br><b>Version:</b> %{y}<extra></extra>'
-            ))
+            if len(subset) > 0:
+                fig.add_trace(go.Scatter(
+                    x=subset['event_id'].astype(str).str.strip(),
+                    y=[version_str] * len(subset),
+                    mode='markers',
+                    marker=dict(
+                        symbol='diamond',
+                        size=10,
+                        color=color_map[version_str],
+                        opacity=1
+                    ),
+                    name='',  # 设置为空字符串
+                    showlegend=False,  # 明确设置为不显示图例
+                    hovertemplate='<b>Event ID:</b> %{x}<br><b>Version:</b> %{y}<extra></extra>'
+                ))
 
         fig.update_layout(
             title='Event AP Config Version',
@@ -250,7 +314,7 @@ def create_version_completeness_chart(df_level_group):
             yaxis_title='Version',
             showlegend=False, 
             yaxis=dict(
-                tickvals=unique_versions,
+                tickvals=[str(v) for v in sorted_versions],
                 tickmode='array'
             ),
             height=500
@@ -266,7 +330,7 @@ def find_missing_levels_with_context(df_group, df_conf):
     找出缺失的元素，并关联它们所在行的event_id和ap_config_version
     """
     try:
-        # 清理数据并跳过前两行
+        # 清理数据并跳过第2-3行
         df_group_clean = get_clean_data(df_group)
         df_conf_clean = get_clean_data(df_conf)
         
@@ -317,15 +381,17 @@ def find_missing_levels_with_context(df_group, df_conf):
             # 按缺失元素、event_id、ap_config_version去重
             unique_df = result_df[['level_name', 'event_id', 'ap_config_version']].drop_duplicates()
             
-            # 排序
+            # 安全排序
             try:
-                unique_df = unique_df.sort_values(['level_name', 'event_id', 'ap_config_version'])
+                # 创建字符串副本用于排序
+                unique_df = unique_df.copy()
+                unique_df['_event_id_str'] = unique_df['event_id'].astype(str).str.strip()
+                unique_df['_ap_version_str'] = unique_df['ap_config_version'].astype(str).str.strip()
+                unique_df = unique_df.sort_values(['level_name', '_event_id_str', '_ap_version_str'])
+                unique_df = unique_df.drop(['_event_id_str', '_ap_version_str'], axis=1)
             except:
-                # 如果排序失败，使用字符串排序
-                unique_df['event_id_str'] = unique_df['event_id'].astype(str).str.strip()
-                unique_df['ap_version_str'] = unique_df['ap_config_version'].astype(str).str.strip()
-                unique_df = unique_df.sort_values(['level_name', 'event_id_str', 'ap_version_str'])
-                unique_df = unique_df.drop(['event_id_str', 'ap_version_str'], axis=1)
+                # 如果排序失败，保持原顺序
+                pass
             
             # 重置索引
             unique_df = unique_df.reset_index(drop=True)
@@ -353,78 +419,92 @@ if uploaded_file:
         if not df_level_group_raw.empty and not df_level_conf_raw.empty:
             st.markdown("### 🎮 前60关配置表生成")
             
-            # 获取清理后的数据用于下拉菜单
+            # 获取清理后的数据用于下拉菜单 - 这里已经忽略了第2-3行
             df_level_group_clean = get_clean_data(df_level_group_raw)
             
             if not df_level_group_clean.empty:
-                # 创建选择器界面
-                col1, col2, col3 = st.columns([2, 2, 1])
+                # 显示数据信息
+                with st.expander("数据源信息", expanded=False):
+                    st.write(f"原始level_group数据行数 (包含表头): {len(df_level_group_raw)}")
+                    st.write(f"清理后level_group数据行数 (已忽略第2-3行): {len(df_level_group_clean)}")
+                    st.write("清理后的前5行数据:")
+                    st.dataframe(df_level_group_clean.head())
                 
-                with col1:
-                    # 获取唯一的event_id
-                    unique_event_ids = sorted(df_level_group_clean['event_id'].dropna().unique())
+                # 获取唯一的event_id和version（从清理后的数据）
+                unique_event_ids = df_level_group_clean['event_id'].dropna().unique()
+                unique_versions = df_level_group_clean['ap_config_version'].dropna().unique()
+                
+                # 安全排序
+                sorted_event_ids = safe_sort_unique(unique_event_ids)
+                sorted_versions = safe_sort_unique(unique_versions)
+                
+                if not sorted_event_ids or not sorted_versions:
+                    st.error("清理后的数据中没有有效的Event ID或Version")
+                else:
                     # 转换为字符串用于显示
-                    event_id_options = [str(x) for x in unique_event_ids]
-                    selected_event_id_str = st.selectbox(
-                        "选择 Event ID",
-                        options=event_id_options,
-                        key="event_id_selector_main"
-                    )
-                
-                with col2:
-                    # 获取唯一的ap_config_version
-                    unique_versions = sorted(df_level_group_clean['ap_config_version'].dropna().unique())
-                    # 转换为字符串用于显示
-                    version_options = [str(x) for x in unique_versions]
-                    selected_version_str = st.selectbox(
-                        "选择 AP Config Version",
-                        options=version_options,
-                        key="version_selector_main"
-                    )
-                
-                with col3:
-                    st.write("")  # 空白行用于垂直对齐
-                    st.write("")  # 空白行用于垂直对齐
-                    generate_btn = st.button(
-                        "🎯 生成前60关配置表",
-                        type="primary",
-                        use_container_width=True
-                    )
-                
-                # 当按钮被点击时生成配置表
-                if generate_btn and selected_event_id_str and selected_version_str:
-                    with st.spinner("正在生成配置表..."):
-                        result_df = generate_first_60_levels(
-                            selected_event_id_str, 
-                            selected_version_str, 
-                            df_level_group_raw,  # 传入原始数据，函数内部会清理
-                            df_level_conf_raw    # 传入原始数据，函数内部会清理
+                    event_id_options = [str(x) for x in sorted_event_ids]
+                    version_options = [str(x) for x in sorted_versions]
+                    
+                    # 创建选择器界面
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    
+                    with col1:
+                        selected_event_id_str = st.selectbox(
+                            "选择 Event ID",
+                            options=event_id_options,
+                            key="event_id_selector_main"
                         )
-                        
-                        if result_df is not None:
-                            st.session_state.level_generation_df = result_df
+                    
+                    with col2:
+                        selected_version_str = st.selectbox(
+                            "选择 AP Config Version",
+                            options=version_options,
+                            key="version_selector_main"
+                        )
+                    
+                    with col3:
+                        st.write("")  # 空白行用于垂直对齐
+                        st.write("")  # 空白行用于垂直对齐
+                        generate_btn = st.button(
+                            "🎯 生成前60关配置表",
+                            type="primary",
+                            use_container_width=True
+                        )
+                    
+                    # 当按钮被点击时生成配置表
+                    if generate_btn and selected_event_id_str and selected_version_str:
+                        with st.spinner("正在生成配置表..."):
+                            result_df = generate_first_60_levels(
+                                selected_event_id_str, 
+                                selected_version_str, 
+                                df_level_group_raw,  # 传入原始数据，函数内部会清理
+                                df_level_conf_raw    # 传入原始数据，函数内部会清理
+                            )
                             
-                            # 显示结果
-                            st.success(f"✅ 成功生成前60关配置表 (Event ID: {selected_event_id_str}, Version: {selected_version_str})")
-                            
-                            # 显示表格
-                            st.dataframe(result_df, use_container_width=True, hide_index=True)
-                            
-                            # 提供下载按钮
-                            output = BytesIO()
-                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                                result_df.to_excel(writer, sheet_name='前60关配置', index=False)
-                            output.seek(0)
-                            
-                            col1, col2 = st.columns([1, 1])
-                            with col1:
-                                st.download_button(
-                                    label="📥 下载前60关配置表 (xlsx)",
-                                    data=output,
-                                    file_name=f"event_{selected_event_id_str}_v{selected_version_str}_前60关配置.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True
-                                )
+                            if result_df is not None:
+                                st.session_state.level_generation_df = result_df
+                                
+                                # 显示结果
+                                st.success(f"✅ 成功生成前60关配置表 (Event ID: {selected_event_id_str}, Version: {selected_version_str})")
+                                
+                                # 显示表格
+                                st.dataframe(result_df, use_container_width=True, hide_index=True)
+                                
+                                # 提供下载按钮
+                                output = BytesIO()
+                                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                    result_df.to_excel(writer, sheet_name='前60关配置', index=False)
+                                output.seek(0)
+                                
+                                col1, col2 = st.columns([1, 1])
+                                with col1:
+                                    st.download_button(
+                                        label="📥 下载前60关配置表 (xlsx)",
+                                        data=output,
+                                        file_name=f"event_{selected_event_id_str}_v{selected_version_str}_前60关配置.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        use_container_width=True
+                                    )
             
             st.markdown("---")
         else:
