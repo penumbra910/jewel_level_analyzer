@@ -32,10 +32,94 @@ if 'chart_html' not in st.session_state:
     st.session_state.chart_html = None
 if 'missing_df' not in st.session_state:
     st.session_state.missing_df = None
+if 'level_generation_df' not in st.session_state:
+    st.session_state.level_generation_df = None
 
 def plotly_to_html(fig):
     """将plotly图表转换为HTML字符串"""
     return pio.to_html(fig, full_html=False, include_plotlyjs='cdn')
+
+def generate_first_60_levels(event_id, ap_config_version, df_level_group, df_level_conf):
+    """
+    生成前60关配置表
+    """
+    try:
+        # 在level_group中查找匹配的行
+        mask = (df_level_group['event_id'] == event_id) & (df_level_group['ap_config_version'] == ap_config_version)
+        matching_rows = df_level_group[mask]
+        
+        if len(matching_rows) == 0:
+            st.error(f"未找到 event_id={event_id}, ap_config_version={ap_config_version} 的记录")
+            return None
+        
+        if len(matching_rows) > 1:
+            st.warning(f"找到多条匹配记录，将使用第一条")
+        
+        selected_row = matching_rows.iloc[0]
+        
+        # 获取level_name_list
+        level_name_list_str = str(selected_row.get('level_name_list', ''))
+        
+        if pd.isna(level_name_list_str) or level_name_list_str.strip() == '':
+            st.error("level_name_list为空")
+            return None
+        
+        # 拆分level_name_list
+        level_names = [name.strip() for name in level_name_list_str.split(',') if name.strip()]
+        
+        # 只取前60个
+        level_names = level_names[:60]
+        
+        # 创建基础DataFrame
+        result_data = []
+        
+        for idx, level_name in enumerate(level_names, 1):
+            # 在level_conf中查找对应的level
+            level_conf_row = df_level_conf[df_level_conf['level_name'] == level_name]
+            
+            if len(level_conf_row) == 0:
+                # 如果找不到对应的level_conf记录，使用空值
+                difficulty = None
+                target_type = None
+                category = None
+                map_above = None
+                map_below = None
+            else:
+                level_conf_data = level_conf_row.iloc[0]
+                
+                # 处理difficulty：如果为0则显示为空
+                difficulty = level_conf_data.get('difficulty')
+                if difficulty == 0 or pd.isna(difficulty):
+                    difficulty = None
+                
+                # 获取其他字段
+                target_type = level_conf_data.get('target_type')
+                category = level_conf_data.get('category')
+                map_above = level_conf_data.get('map_above')
+                map_below = level_conf_data.get('map_below')
+            
+            result_data.append({
+                'level_name': level_name,
+                'level_id': idx,
+                'difficulty': difficulty,
+                'target_type': target_type,
+                'category': category,
+                'map_above': map_above,
+                'map_below': map_below
+            })
+        
+        # 创建DataFrame
+        result_df = pd.DataFrame(result_data)
+        
+        # 删除level_name列
+        if 'level_name' in result_df.columns:
+            result_df = result_df.drop('level_name', axis=1)
+        
+        return result_df
+        
+    except Exception as e:
+        st.error(f"生成配置表时出错: {str(e)}")
+        return None
 
 def create_version_completeness_chart(df_level_group):
     """创建Event Version完整性图表 - 鲜艳彩色版"""
@@ -164,12 +248,84 @@ def find_missing_levels_with_context(df_group, df_conf):
         st.error(f"查找缺失记录时出错: {str(e)}")
         return pd.DataFrame(columns=['level_name', 'event_id', 'ap_config_version'])
 
+# 新增：前60关配置表生成功能
+st.sidebar.markdown("---")
+st.sidebar.header("🎮 前60关配置表生成")
+
 # 主处理流程
 if uploaded_file:
+    # 先读取文件获取数据用于下拉菜单
+    with st.spinner("正在加载配置表..."):
+        try:
+            # 读取所有sheet
+            all_sheets = pd.read_excel(uploaded_file, sheet_name=None)
+            
+            # 获取关键sheet
+            df_level_group = all_sheets.get('level_group', pd.DataFrame())
+            df_level_conf = all_sheets.get('level_conf', pd.DataFrame())
+            
+            if not df_level_group.empty:
+                # 创建选择器界面
+                st.sidebar.subheader("选择配置")
+                
+                # 获取唯一的event_id和ap_config_version
+                unique_event_ids = sorted(df_level_group['event_id'].dropna().unique())
+                unique_versions = sorted(df_level_group['ap_config_version'].dropna().unique())
+                
+                # 创建下拉选择器
+                selected_event_id = st.sidebar.selectbox(
+                    "选择 Event ID",
+                    options=unique_event_ids,
+                    key="event_id_selector"
+                )
+                
+                selected_version = st.sidebar.selectbox(
+                    "选择 AP Config Version",
+                    options=unique_versions,
+                    key="version_selector"
+                )
+                
+                # 生成按钮
+                if st.sidebar.button("🎯 生成前60关配置表", type="primary", use_container_width=True):
+                    with st.spinner("正在生成配置表..."):
+                        result_df = generate_first_60_levels(
+                            selected_event_id, 
+                            selected_version, 
+                            df_level_group, 
+                            df_level_conf
+                        )
+                        
+                        if result_df is not None:
+                            st.session_state.level_generation_df = result_df
+                            
+                            # 显示结果
+                            st.success(f"✅ 成功生成前60关配置表 (Event ID: {selected_event_id}, Version: {selected_version})")
+                            
+                            # 显示表格
+                            st.dataframe(result_df, use_container_width=True, hide_index=True)
+                            
+                            # 提供下载按钮
+                            output = BytesIO()
+                            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                                result_df.to_excel(writer, sheet_name='前60关配置', index=False)
+                            output.seek(0)
+                            
+                            st.download_button(
+                                label="📥 下载前60关配置表 (xlsx)",
+                                data=output,
+                                file_name=f"event_{selected_event_id}_v{selected_version}_前60关配置.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+            else:
+                st.sidebar.warning("level_group sheet为空或不存在")
+                
+        except Exception as e:
+            st.error(f"加载文件时出错: {str(e)}")
+    
     with st.spinner("正在处理配置表..."):
         try:
-            # 1. 读取所有sheet
-            all_sheets = pd.read_excel(uploaded_file, sheet_name=None)
+            # 保存到session state
             st.session_state.all_sheets = all_sheets
             
             # 获取关键sheet
@@ -263,5 +419,4 @@ if uploaded_file:
             st.error(f"处理文件时出错: {str(e)}")
 else:
     st.info("请在左侧上传Events&Level配置表文件")
-
-
+    st.sidebar.info("📤 请先上传文件以使用配置表生成功能")
